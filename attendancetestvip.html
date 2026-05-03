@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+  <title>Hệ thống điểm danh thông minh</title>
+  <!-- Thư viện XLSX (chỉ dùng cho admin) -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <!-- Face API (dùng chung) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',Roboto,system-ui,sans-serif; }
+    body { background:#f0f4f8; min-height:100vh; display:flex; justify-content:center; align-items:center; padding:20px; }
+    .app-container { width:100%; max-width:1300px; background:white; border-radius:32px; box-shadow:0 30px 60px rgba(0,0,0,0.1); overflow:hidden; }
+    .header { background:linear-gradient(135deg,#0b2b5e,#154a8a); color:white; padding:20px 30px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:20px; }
+    .header h1 { font-size:1.7rem; font-weight:700; display:flex; align-items:center; gap:10px; }
+    .clock-box { background:rgba(255,255,255,0.15); backdrop-filter:blur(10px); border-radius:20px; padding:8px 20px; font-size:1.3rem; font-weight:700; display:flex; align-items:center; gap:10px; }
+    .date-box { background:rgba(255,255,255,0.12); border-radius:20px; padding:8px 18px; display:flex; align-items:center; gap:10px; }
+    .date-box input[type="date"] { background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.3); color:white; padding:8px 12px; border-radius:14px; font-size:1rem; font-weight:500; outline:none; }
+    .date-box input[type="date"]::-webkit-calendar-picker-indicator { filter:invert(1); }
+    .collapsible-panel { margin:15px 25px 0 25px; background:#f0f4fe; border-radius:20px; border:1px solid #d0ddea; overflow:hidden; }
+    .panel-header { display:flex; justify-content:space-between; align-items:center; padding:12px 20px; background:#eaf0fa; font-weight:700; color:#0b2b5e; }
+    .panel-body { padding:15px 20px; display:flex; flex-wrap:wrap; align-items:center; gap:15px; }
+    .panel-body input, .panel-body select { padding:10px 16px; border-radius:14px; border:1px solid #cdd9eb; font-size:0.9rem; }
+    .btn { padding:10px 20px; border-radius:16px; border:none; font-weight:600; font-size:0.9rem; display:flex; align-items:center; gap:8px; cursor:pointer; transition:all 0.2s; background:white; border:1px solid #dce3ea; color:#1e293b; }
+    .btn-primary { background:#0b2b5e; border:1px solid #0b2b5e; color:white; }
+    .btn-primary:hover { background:#123e7c; }
+    .btn-outline:hover { background:#f1f5f9; }
+    .btn-danger { background:#fee2e2; color:#b91c1c; border-color:#fecaca; }
+    .btn-danger:hover { background:#fecaca; }
+    .controls { padding:20px 30px; background:#f8faff; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; border-bottom:1px solid #e9eef2; }
+    .class-filter select { padding:10px 20px; border-radius:16px; border:1px solid #dce3ea; font-weight:500; }
+    .stats-badge { background:white; border-radius:20px; padding:6px 16px; font-weight:600; font-size:0.9rem; display:flex; gap:15px; color:#334155; border:1px solid #e2e8f0; }
+    .table-wrapper { padding:5px 20px 20px 20px; overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; white-space:nowrap; }
+    th { text-align:left; padding:16px 12px; background:#f1f6fc; color:#1e3a5f; font-weight:700; font-size:0.85rem; text-transform:uppercase; border-bottom:2px solid #d0ddea; }
+    td { padding:12px; border-bottom:1px solid #edf2f7; vertical-align:middle; }
+    tr:hover td { background:#fafcff; }
+    .student-photo-cell img { width:38px; height:38px; border-radius:50%; object-fit:cover; border:2px solid #e2e8f0; }
+    .no-photo { font-size:1.5rem; opacity:0.5; }
+    .status-badge { display:inline-block; padding:6px 14px; border-radius:20px; font-weight:600; font-size:0.85rem; }
+    .status-present { background:#e3f5ea; color:#0f6e3f; }
+    .status-absent { background:#fee9e9; color:#b91c1c; }
+    .status-late { background:#fff3e0; color:#b85e00; }
+    .student-id { color:#64748b; font-size:0.8rem; font-weight:600; background:#f1f5f9; padding:4px 8px; border-radius:10px; }
+    .history-panel { padding:0 25px 25px 25px; margin-top:5px; }
+    .history-toggle { background:none; border:none; color:#0b2b5e; font-weight:700; cursor:pointer; font-size:0.95rem; display:flex; align-items:center; gap:6px; padding:10px 0; }
+    .history-content { margin-top:10px; background:#f8fafd; border-radius:20px; padding:15px 20px; border:1px solid #e2e8f0; max-height:220px; overflow-y:auto; font-size:0.9rem; }
+    .history-item { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed #dce3ea; }
+    hr { margin:5px 25px; border:0.5px solid #e9eef2; }
+    @media (max-width:700px) { .header, .controls { flex-direction:column; align-items:flex-start; } }
+    /* Màn hình chọn vai trò */
+    #roleSelection { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:30px; padding:40px; }
+    #roleSelection h2 { color:#0b2b5e; }
+    .role-buttons { display:flex; gap:20px; }
+    .role-btn { padding:15px 40px; font-size:1.2rem; border-radius:24px; cursor:pointer; border:none; font-weight:700; }
+    .role-btn.admin { background:#0b2b5e; color:white; }
+    .role-btn.student { background:#e2e8f0; color:#1e293b; }
+  </style>
+</head>
+<body>
+  <div class="app-container" id="appContainer">
+    <!-- Màn hình chọn vai trò -->
+    <div id="roleSelection">
+      <h2>Bạn là ai?</h2>
+      <div class="role-buttons">
+        <button class="role-btn admin" onclick="selectRole('admin')">👨‍🏫 Giáo viên quản lý</button>
+        <button class="role-btn student" onclick="selectRole('student')">🎒 Học sinh</button>
+      </div>
+    </div>
+
+    <!-- ================= GIAO DIỆN ADMIN ================= -->
+    <div id="adminUI" style="display:none;">
+      <div class="header">
+        <h1>📋 Quản lý điểm danh</h1>
+        <div style="display:flex; align-items:center; gap:15px;">
+          <div class="clock-box" id="adminLiveClock">🕒 --:--:--</div>
+          <button class="btn btn-outline" onclick="logout()" style="color:white; border-color:rgba(255,255,255,0.5);">🚪 Đăng xuất</button>
+        </div>
+        <div class="date-box">
+          <span>📅 Ngày:</span>
+          <input type="date" id="adminAttendanceDate">
+        </div>
+      </div>
+
+      <!-- Panel thêm học sinh -->
+      <div class="collapsible-panel">
+        <div class="panel-header">
+          <span>➕ Thêm học sinh mới</span>
+          <button id="toggleAddStudentPanelBtn" class="btn btn-outline" style="padding:5px 12px;">▲ Ẩn</button>
+        </div>
+        <div class="panel-body" id="addStudentBody">
+          <input type="text" id="newStudentId" placeholder="Mã HS (VD: HS001)" required>
+          <input type="text" id="newStudentName" placeholder="Họ và tên" required>
+          <input type="text" id="newStudentClass" placeholder="Lớp" list="classList" required>
+          <datalist id="classList"></datalist>
+          <label>Ảnh chân dung: <input type="file" id="newStudentPhoto" accept="image/*"></label>
+          <button id="addStudentBtn" class="btn btn-primary">✅ Thêm</button>
+        </div>
+      </div>
+
+      <!-- Panel chụp ảnh (admin cũng có thể dùng để điểm danh mẫu) -->
+      <div class="collapsible-panel">
+        <div class="panel-header">
+          <span>📸 Chụp & Xác minh (ESP32‑CAM)</span>
+          <button id="toggleAdminPhotoPanelBtn" class="btn btn-outline" style="padding:5px 12px;">▲ Ẩn</button>
+        </div>
+        <div class="panel-body" id="adminPhotoUploadBody">
+          <label>📡 IP Camera:</label>
+          <input type="text" id="adminEsp32Ip" placeholder="192.168.1.10">
+          <label>👤 Học sinh:</label>
+          <select id="adminPhotoStudentSelect"></select>
+          <button id="adminCapturePhotoBtn" class="btn btn-primary">📸 Chụp & Xác minh</button>
+          <button id="adminRemovePhotoBtn" class="btn btn-outline">🗑️ Gỡ ảnh</button>
+          <span id="adminFaceStatus" style="font-weight:600; color:#b91c1c;"></span>
+          <div id="adminPhotoPreview"></div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="class-filter">
+          <span>🏫 Lớp:</span>
+          <select id="adminClassFilter">
+            <option value="all">Tất cả lớp</option>
+          </select>
+        </div>
+        <div>
+          <button class="btn btn-outline" id="adminExportExcelBtn">📊 Xuất Excel</button>
+        </div>
+        <div class="stats-badge">
+          <span>🟢 Có mặt: <span id="adminPresentCount">0</span></span>
+          <span>🔴 Vắng: <span id="adminAbsentCount">0</span></span>
+          <span>🟠 Muộn: <span id="adminLateCount">0</span></span>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table id="adminStudentTable">
+          <thead>
+             <tr>
+                <th>Mã HS</th>
+                <th>Ảnh</th>
+                <th>Họ và tên</th>
+                <th>Lớp</th>
+                <th>Trạng thái</th>
+                <th>Giờ</th>
+                <th>Ghi chú</th>
+                <th>Hành động</th>
+             </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <hr>
+      <div class="history-panel">
+        <button class="history-toggle" id="adminHistoryToggleBtn">
+          📖 Xem lịch sử điểm danh <span id="adminToggleIcon">▼</span>
+        </button>
+        <div class="history-content" id="adminHistoryContent" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- ================= GIAO DIỆN HỌC SINH ================= -->
+    <div id="studentUI" style="display:none;">
+      <div class="header">
+        <h1>📸 Điểm danh học sinh</h1>
+        <div class="clock-box" id="studentLiveClock">🕒 --:--:--</div>
+        <div class="date-box">
+          <span>📅 Ngày:</span>
+          <input type="date" id="studentAttendanceDate" disabled>
+        </div>
+      </div>
+      <div style="padding:20px;">
+        <div class="collapsible-panel">
+          <div class="panel-header">
+            <span>📸 Chụp ảnh và điểm danh</span>
+          </div>
+          <div class="panel-body" id="studentPhotoUploadBody">
+            <label>📡 IP Camera:</label>
+            <input type="text" id="studentEsp32Ip" placeholder="192.168.1.10">
+            <label>👤 Tôi là:</label>
+            <select id="studentPhotoStudentSelect"></select>
+            <button id="studentCapturePhotoBtn" class="btn btn-primary">📸 Chụp & Xác minh</button>
+            <span id="studentFaceStatus" style="font-weight:600; color:#b91c1c;"></span>
+            <div id="studentPhotoPreview"></div>
+            <div id="studentResult" style="margin-top:15px; font-weight:600;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      // ========== DỮ LIỆU CHUNG ==========
+      const STATUS = { PRESENT: "Có mặt", ABSENT: "Vắng mặt", LATE: "Đi muộn" };
+      const STORAGE = {
+        STUDENTS: "att_students_v3",
+        ATTENDANCE: "att_records_v3",
+        PHOTOS: "att_captured_photos_v3",
+        REF_PHOTOS: "att_ref_photos_v3",
+        ESP32_IP: "esp32_cam_ip_v3"
+      };
+
+      let studentList = [];
+      let attendanceData = {};
+      let studentPhotos = {};    // ảnh điểm danh
+      let referencePhotos = {}; // ảnh tham chiếu
+
+      // Face API
+      const MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/";
+      let faceApiReady = false;
+
+      // ========== KHỞI TẠO CHUNG ==========
+      function loadData() {
+        studentList = JSON.parse(localStorage.getItem(STORAGE.STUDENTS) || '[]');
+        attendanceData = JSON.parse(localStorage.getItem(STORAGE.ATTENDANCE) || '{}');
+        studentPhotos = JSON.parse(localStorage.getItem(STORAGE.PHOTOS) || '{}');
+        referencePhotos = JSON.parse(localStorage.getItem(STORAGE.REF_PHOTOS) || '{}');
+        const ip = localStorage.getItem(STORAGE.ESP32_IP);
+        if (ip) {
+          document.getElementById('adminEsp32Ip') && (document.getElementById('adminEsp32Ip').value = ip);
+          document.getElementById('studentEsp32Ip') && (document.getElementById('studentEsp32Ip').value = ip);
+        }
+      }
+
+      function saveStudents() { localStorage.setItem(STORAGE.STUDENTS, JSON.stringify(studentList)); }
+      function saveAttendance() { localStorage.setItem(STORAGE.ATTENDANCE, JSON.stringify(attendanceData)); }
+      function savePhotos() { localStorage.setItem(STORAGE.PHOTOS, JSON.stringify(studentPhotos)); }
+      function saveRefPhotos() { localStorage.setItem(STORAGE.REF_PHOTOS, JSON.stringify(referencePhotos)); }
+
+      // Tiện ích thời gian
+      function getCurrentTime() {
+        const d = new Date();
+        return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+      }
+      function getStatusFromTime(t) {
+        if (!t) return STATUS.ABSENT;
+        const [h, m] = t.split(':').map(Number);
+        return (h < 6 || (h === 6 && m < 55)) ? STATUS.PRESENT : STATUS.LATE;
+      }
+      function getRecordKey(id, date) { return `${id}_${date}`; }
+      function getRecord(id, date) {
+        return attendanceData[getRecordKey(id, date)] || null;
+      }
+      function setRecord(id, date, status, time, note = "") {
+        attendanceData[getRecordKey(id, date)] = { status, time, note };
+      }
+
+      // ========== FACE API ==========
+      async function initFaceApi() {
+        try {
+          await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+          await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+          await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+          faceApiReady = true;
+          console.log('Face API ready');
+        } catch (e) {
+          console.error('Face API load error:', e);
+          faceApiReady = false;
+        }
+      }
+
+      function createImageElement(src) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = src;
+        });
+      }
+
+      function resizeImage(dataUrl, maxDim) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            let w = img.width, h = img.height;
+            if (w > h) { if (w > maxDim) { h *= maxDim/w; w = maxDim; } }
+            else { if (h > maxDim) { w *= maxDim/h; h = maxDim; } }
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.8));
+          };
+          img.onerror = reject;
+          img.src = dataUrl;
+        });
+      }
+
+      async function verifyFace(capturedImageDataUrl, studentId) {
+        if (!faceApiReady) throw new Error("Hệ thống nhận dạng chưa sẵn sàng.");
+        const refImage = referencePhotos[studentId];
+        if (!refImage) throw new Error("Học sinh chưa có ảnh chân dung tham chiếu.");
+
+        const capturedImg = await createImageElement(capturedImageDataUrl);
+        const refImg = await createImageElement(refImage);
+
+        const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+        const capResult = await faceapi.detectSingleFace(capturedImg, options).withFaceLandmarks().withFaceDescriptor();
+        const refResult = await faceapi.detectSingleFace(refImg, options).withFaceLandmarks().withFaceDescriptor();
+
+        if (!capResult) throw new Error("Không phát hiện khuôn mặt trong ảnh chụp.");
+        if (!refResult) throw new Error("Ảnh tham chiếu không có khuôn mặt.");
+
+        const distance = faceapi.euclideanDistance(capResult.descriptor, refResult.descriptor);
+        return distance < 0.6;
+      }
+
+      // ========== CHỨC NĂNG ĐIỂM DANH CHUNG ==========
+      async function performCaptureAndVerify(ip, studentId, statusElement, previewElement, onSuccess) {
+        if (!ip) throw new Error("Vui lòng nhập IP camera.");
+        const url = `http://${ip}/capture`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Camera lỗi ${response.status}`);
+        const blob = await response.blob();
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+
+        const resized = await resizeImage(dataUrl, 640);
+        const isValid = await verifyFace(resized, studentId);
+
+        if (isValid) {
+          // Lưu ảnh thumbnail
+          const thumb = await resizeImage(dataUrl, 150);
+          studentPhotos[studentId] = thumb;
+          savePhotos();
+
+          const time = getCurrentTime();
+          const status = getStatusFromTime(time);
+          const oldNote = getRecord(studentId, currentDate)?.note || '';
+          setRecord(studentId, currentDate, status, time, oldNote);
+          saveAttendance();
+
+          if (previewElement) {
+            previewElement.innerHTML = `<img src="${thumb}" style="width:60px;height:60px;border-radius:15px;object-fit:cover;">`;
+          }
+          if (onSuccess) onSuccess(studentId, status, time);
+          return { success: true, status, time };
+        } else {
+          throw new Error("Khuôn mặt không khớp – có thể đang điểm danh hộ!");
+        }
+      }
+
+      // ========== GIAO DIỆN ==========
+      let currentRole = null;
+      let currentDate = new Date().toISOString().split('T')[0];
+
+      function showRoleSelection() {
+        document.getElementById('roleSelection').style.display = 'flex';
+        document.getElementById('adminUI').style.display = 'none';
+        document.getElementById('studentUI').style.display = 'none';
+      }
+
+      function showAdminUI() {
+        document.getElementById('roleSelection').style.display = 'none';
+        document.getElementById('adminUI').style.display = 'block';
+        document.getElementById('studentUI').style.display = 'none';
+        initAdminUI();
+      }
+
+      function showStudentUI() {
+        document.getElementById('roleSelection').style.display = 'none';
+        document.getElementById('adminUI').style.display = 'none';
+        document.getElementById('studentUI').style.display = 'block';
+        initStudentUI();
+      }
+
+      // Đăng xuất
+      window.logout = function() {
+        if (confirm('Đăng xuất?')) {
+          currentRole = null;
+          showRoleSelection();
+        }
+      };
+
+      // Chọn vai trò
+      window.selectRole = function(role) {
+        if (role === 'admin') {
+          // Yêu cầu đăng nhập
+          const username = prompt("Tên đăng nhập:");
+          if (username !== 'giaovienql') {
+            alert('Sai tên đăng nhập!');
+            return;
+          }
+          const password = prompt("Mật khẩu:");
+          if (password !== 'gv123') {
+            alert('Sai mật khẩu!');
+            return;
+          }
+          currentRole = 'admin';
+          showAdminUI();
+        } else if (role === 'student') {
+          currentRole = 'student';
+          showStudentUI();
+        }
+      };
+
+      // ========== ADMIN UI ==========
+      function initAdminUI() {
+        // Đồng hồ
+        const adminClock = document.getElementById('adminLiveClock');
+        function updateClock() {
+          const now = new Date();
+          adminClock.textContent = `🕒 ${now.toLocaleTimeString('vi-VN')}`;
+        }
+        updateClock();
+        setInterval(updateClock, 200);
+
+        const dateInput = document.getElementById('adminAttendanceDate');
+        dateInput.value = currentDate;
+        dateInput.addEventListener('change', e => {
+          currentDate = e.target.value;
+          renderAdminTable();
+        });
+
+        // Lọc lớp
+        const classFilter = document.getElementById('adminClassFilter');
+        const updateClassFilter = () => {
+          const classes = [...new Set(studentList.map(s => s.class))];
+          classFilter.innerHTML = '<option value="all">Tất cả lớp</option>';
+          classes.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c;
+            opt.textContent = c;
+            classFilter.appendChild(opt);
+          });
+        };
+        updateClassFilter();
+        classFilter.addEventListener('change', renderAdminTable);
+
+        // Datalist lớp
+        const classDatalist = document.getElementById('classList');
+        const updateDatalist = () => {
+          const classes = [...new Set(studentList.map(s => s.class))];
+          classDatalist.innerHTML = '';
+          classes.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c;
+            classDatalist.appendChild(opt);
+          });
+        };
+        updateDatalist();
+
+        // Nút thêm học sinh
+        document.getElementById('addStudentBtn').addEventListener('click', () => {
+          const id = document.getElementById('newStudentId').value.trim();
+          const name = document.getElementById('newStudentName').value.trim();
+          const cls = document.getElementById('newStudentClass').value.trim();
+          if (!id || !name || !cls) return alert('Vui lòng điền đầy đủ.');
+          if (studentList.some(s => s.id === id)) return alert('Mã HS đã tồn tại.');
+
+          const fileInput = document.getElementById('newStudentPhoto');
+          const handleFile = (callback) => {
+            if (fileInput.files.length > 0) {
+              const file = fileInput.files[0];
+              const reader = new FileReader();
+              reader.onload = async (e) => {
+                const img = await createImageElement(e.target.result);
+                const maxDim = 300;
+                let w = img.width, h = img.height;
+                if (w > h) { if (w > maxDim) { h *= maxDim/w; w = maxDim; } }
+                else { if (h > maxDim) { w *= maxDim/h; h = maxDim; } }
+                const canvas = document.createElement('canvas');
+                canvas.width = w; canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                referencePhotos[id] = canvas.toDataURL('image/jpeg', 0.85);
+                saveRefPhotos();
+                callback();
+              };
+              reader.readAsDataURL(file);
+            } else {
+              callback();
+            }
+          };
+          handleFile(() => {
+            studentList.push({ id, name, class: cls });
+            saveStudents();
+            updateClassFilter();
+            updateDatalist();
+            populateSelects();
+            renderAdminTable();
+            document.getElementById('newStudentId').value = '';
+            document.getElementById('newStudentName').value = '';
+            document.getElementById('newStudentClass').value = '';
+            fileInput.value = '';
+          });
+        });
+
+        // Toggle panel add student
+        document.getElementById('toggleAddStudentPanelBtn').addEventListener('click', function() {
+          const body = document.getElementById('addStudentBody');
+          if (body.style.display === 'none') { body.style.display = ''; this.textContent = '▲ Ẩn'; }
+          else { body.style.display = 'none'; this.textContent = '▼ Hiện'; }
+        });
+
+        // Panel chụp ảnh admin
+        const adminIp = document.getElementById('adminEsp32Ip');
+        const adminSelect = document.getElementById('adminPhotoStudentSelect');
+        const adminCapture = document.getElementById('adminCapturePhotoBtn');
+        const adminRemove = document.getElementById('adminRemovePhotoBtn');
+        const adminStatus = document.getElementById('adminFaceStatus');
+        const adminPreview = document.getElementById('adminPhotoPreview');
+
+        const populateSelects = () => {
+          [adminSelect, document.getElementById('studentPhotoStudentSelect')].forEach(sel => {
+            if (!sel) return;
+            sel.innerHTML = '<option value="">-- Chọn học sinh --</option>';
+            studentList.forEach(s => {
+              const opt = document.createElement('option');
+              opt.value = s.id;
+              opt.textContent = `${s.name} (${s.id})`;
+              sel.appendChild(opt);
+            });
+          });
+        };
+        populateSelects();
+
+        adminSelect.addEventListener('change', function() {
+          const id = this.value;
+          adminPreview.innerHTML = id && studentPhotos[id] ? `<img src="${studentPhotos[id]}" style="width:60px;height:60px;border-radius:15px;object-fit:cover;">` : '';
+        });
+
+        adminCapture.addEventListener('click', async () => {
+          const studentId = adminSelect.value;
+          if (!studentId) return alert('Chọn học sinh.');
+          const ip = adminIp.value.trim();
+          localStorage.setItem(STORAGE.ESP32_IP, ip);
+          adminStatus.textContent = '';
+          adminCapture.disabled = true;
+          adminCapture.textContent = '⏳ Đang chụp...';
+          try {
+            await performCaptureAndVerify(ip, studentId, adminStatus, adminPreview, () => {
+              adminStatus.textContent = '✅ Xác minh thành công!';
+              adminStatus.style.color = '#0f6e3f';
+              renderAdminTable();
+            });
+          } catch (e) {
+            adminStatus.textContent = '❌ ' + e.message;
+            adminStatus.style.color = '#b91c1c';
+          } finally {
+            adminCapture.disabled = false;
+            adminCapture.textContent = '📸 Chụp & Xác minh';
+          }
+        });
+
+        adminRemove.addEventListener('click', () => {
+          const id = adminSelect.value;
+          if (!id) return alert('Chọn học sinh.');
+          if (studentPhotos[id]) { delete studentPhotos[id]; savePhotos(); }
+          const rec = getRecord(id, currentDate);
+          setRecord(id, currentDate, STATUS.ABSENT, '', rec ? rec.note : '');
+          saveAttendance();
+          adminPreview.innerHTML = '';
+          adminStatus.textContent = '';
+          renderAdminTable();
+        });
+
+        // Toggle panel chụp admin
+        document.getElementById('toggleAdminPhotoPanelBtn').addEventListener('click', function() {
+          const body = document.getElementById('adminPhotoUploadBody');
+          if (body.style.display === 'none') { body.style.display = ''; this.textContent = '▲ Ẩn'; }
+          else { body.style.display = 'none'; this.textContent = '▼ Hiện'; }
+        });
+
+        // Bảng admin
+        window.renderAdminTable = function() {
+          const students = classFilter.value === 'all' ? studentList : studentList.filter(s => s.class === classFilter.value);
+          const tbody = document.querySelector('#adminStudentTable tbody');
+          tbody.innerHTML = '';
+          if (!students.length) {
+            tbody.innerHTML = '<tr><td colspan="8">Chưa có học sinh.</td></tr>';
+            updateAdminStats(0,0,0);
+            return;
+          }
+          let p = 0, a = 0, l = 0;
+          students.forEach(s => {
+            const rec = getRecord(s.id, currentDate);
+            const status = rec ? rec.status : STATUS.ABSENT;
+            const time = rec ? rec.time : '';
+            const note = rec ? rec.note : '';
+            if (status === STATUS.PRESENT) p++;
+            else if (status === STATUS.LATE) l++;
+            else a++;
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td><span class="student-id">${s.id}</span></td>
+              <td class="student-photo-cell">${studentPhotos[s.id] ? `<img src="${studentPhotos[s.id]}" alt="${s.name}">` : '<span class="no-photo">👤</span>'}</td>
+              <td>${s.name}</td>
+              <td>${s.class}</td>
+              <td><span class="status-badge ${status===STATUS.PRESENT?'status-present': (status===STATUS.LATE?'status-late':'status-absent')}">${status}</span></td>
+              <td>${time || '—'}</td>
+              <td><input type="text" value="${note}" class="note-input" data-id="${s.id}" style="padding:6px 10px;border-radius:12px;border:1px solid #dce3ea;width:100%;"></td>
+              <td><button class="btn btn-danger delete-btn" data-id="${s.id}">🗑️</button></td>
+            `;
+            tbody.appendChild(row);
+          });
+
+          // Note listeners
+          tbody.querySelectorAll('.note-input').forEach(inp => {
+            inp.addEventListener('input', function(e) {
+              const id = this.dataset.id;
+              const rec = getRecord(id, currentDate);
+              if (rec) {
+                rec.note = e.target.value;
+                setRecord(id, currentDate, rec.status, rec.time, e.target.value);
+              } else {
+                setRecord(id, currentDate, STATUS.ABSENT, '', e.target.value);
+              }
+              saveAttendance();
+            });
+          });
+          // Delete buttons
+          tbody.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+              const id = this.dataset.id;
+              if (confirm(`Xóa học sinh ${id}?`)) {
+                studentList = studentList.filter(s => s.id !== id);
+                delete studentPhotos[id];
+                delete referencePhotos[id];
+                saveStudents(); savePhotos(); saveRefPhotos();
+                updateClassFilter();
+                updateDatalist();
+                populateSelects();
+                renderAdminTable();
+              }
+            });
+          });
+          updateAdminStats(p, a, l);
+        };
+
+        function updateAdminStats(p, a, l) {
+          document.getElementById('adminPresentCount').textContent = p;
+          document.getElementById('adminAbsentCount').textContent = a;
+          document.getElementById('adminLateCount').textContent = l;
+        }
+
+        // Xuất Excel
+        document.getElementById('adminExportExcelBtn').addEventListener('click', () => {
+          const students = classFilter.value === 'all' ? studentList : studentList.filter(s => s.class === classFilter.value);
+          const data = [['STT','Mã HS','Họ tên','Lớp','Trạng thái','Giờ','Ghi chú']];
+          students.forEach((s, idx) => {
+            const rec = getRecord(s.id, currentDate);
+            data.push([idx+1, s.id, s.name, s.class, rec?rec.status:STATUS.ABSENT, rec?rec.time:'', rec?rec.note:'']);
+          });
+          const ws = XLSX.utils.aoa_to_sheet(data);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, 'Điểm danh');
+          XLSX.writeFile(wb, `DiemDanh_${currentDate}.xlsx`);
+        });
+
+        // Lịch sử
+        document.getElementById('adminHistoryToggleBtn').addEventListener('click', () => {
+          const content = document.getElementById('adminHistoryContent');
+          const icon = document.getElementById('adminToggleIcon');
+          if (content.style.display === 'none') {
+            content.style.display = 'block';
+            icon.textContent = '▲';
+            renderAdminHistory();
+          } else {
+            content.style.display = 'none';
+            icon.textContent = '▼';
+          }
+        });
+
+        function renderAdminHistory() {
+          const keys = Object.keys(attendanceData);
+          const grouped = {};
+          keys.forEach(k => {
+            const [id, ...dateArr] = k.split('_');
+            const date = dateArr.join('_');
+            if (!grouped[date]) grouped[date] = [];
+            const rec = attendanceData[k];
+            const student = studentList.find(s => s.id === id);
+            grouped[date].push({ id, name: student?student.name:id, status:rec.status, time:rec.time, note:rec.note });
+          });
+          const sortedDates = Object.keys(grouped).sort((a,b) => b.localeCompare(a));
+          let html = '';
+          sortedDates.forEach(date => {
+            html += `<div style="margin-bottom:12px;"><strong>📅 ${date}</strong></div>`;
+            grouped[date].forEach(e => {
+              let icon = e.status === STATUS.PRESENT ? '🟢' : (e.status === STATUS.LATE ? '🟠' : '🔴');
+              html += `<div class="history-item"><span><span class="student-id">${e.id}</span> ${e.name}</span><span>${icon} ${e.status} ${e.time?'lúc '+e.time:''} ${e.note?'- '+e.note:''}</span></div>`;
+            });
+            html += '<br>';
+          });
+          document.getElementById('adminHistoryContent').innerHTML = html || 'Chưa có lịch sử.';
+        }
+
+        renderAdminTable();
+      }
+
+      // ========== STUDENT UI ==========
+      function initStudentUI() {
+        const studentClock = document.getElementById('studentLiveClock');
+        function updateClock() {
+          const now = new Date();
+          studentClock.textContent = `🕒 ${now.toLocaleTimeString('vi-VN')}`;
+        }
+        updateClock();
+        setInterval(updateClock, 200);
+
+        document.getElementById('studentAttendanceDate').value = currentDate;
+
+        const studentSelect = document.getElementById('studentPhotoStudentSelect');
+        const studentIp = document.getElementById('studentEsp32Ip');
+        const studentCapture = document.getElementById('studentCapturePhotoBtn');
+        const studentStatus = document.getElementById('studentFaceStatus');
+        const studentPreview = document.getElementById('studentPhotoPreview');
+        const studentResult = document.getElementById('studentResult');
+
+        // Populate select (học sinh nào cũng thấy toàn bộ danh sách, nhưng face verify sẽ bảo vệ)
+        studentSelect.innerHTML = '<option value="">-- Chọn tên bạn --</option>';
+        studentList.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = `${s.name} (${s.id})`;
+          studentSelect.appendChild(opt);
+        });
+
+        studentSelect.addEventListener('change', function() {
+          const id = this.value;
+          studentPreview.innerHTML = id && studentPhotos[id] ? `<img src="${studentPhotos[id]}" style="width:60px;height:60px;border-radius:15px;object-fit:cover;">` : '';
+          // Hiển thị trạng thái hiện tại nếu có
+          if (id) {
+            const rec = getRecord(id, currentDate);
+            if (rec && rec.status !== STATUS.ABSENT) {
+              studentResult.innerHTML = `📌 Bạn đã điểm danh: <span style="color:#0f6e3f;">${rec.status}</span> lúc ${rec.time}`;
+            } else {
+              studentResult.innerHTML = '';
+            }
+          } else {
+            studentResult.innerHTML = '';
+          }
+        });
+
+        studentCapture.addEventListener('click', async () => {
+          const studentId = studentSelect.value;
+          if (!studentId) return alert('Vui lòng chọn tên của bạn.');
+          const ip = studentIp.value.trim();
+          localStorage.setItem(STORAGE.ESP32_IP, ip);
+          studentStatus.textContent = '';
+          studentCapture.disabled = true;
+          studentCapture.textContent = '⏳ Đang chụp...';
+          try {
+            await performCaptureAndVerify(ip, studentId, studentStatus, studentPreview, (id, status, time) => {
+              studentStatus.textContent = '✅ Điểm danh thành công!';
+              studentStatus.style.color = '#0f6e3f';
+              studentResult.innerHTML = `🎉 Bạn đã được điểm danh: <span style="color:#0f6e3f;">${status}</span> lúc ${time}`;
+            });
+          } catch (e) {
+            studentStatus.textContent = '❌ ' + e.message;
+            studentStatus.style.color = '#b91c1c';
+          } finally {
+            studentCapture.disabled = false;
+            studentCapture.textContent = '📸 Chụp & Xác minh';
+          }
+        });
+      }
+
+      // ========== KHỞI ĐỘNG ==========
+      loadData();
+      initFaceApi();
+      showRoleSelection(); // mặc định hiện màn hình chọn
+
+      // Cập nhật role khi load lại (nếu muốn giữ phiên, có thể lưu vào sessionStorage - hiện không làm)
+    })();
+  </script>
+</body>
+</html>
